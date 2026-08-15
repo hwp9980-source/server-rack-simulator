@@ -86,6 +86,7 @@ select:focus, input[type="search"]:focus { border-color: var(--accent); }
 .btn:hover { border-color: var(--accent); color: #fff; }
 .btn.danger:hover { border-color: var(--danger); color: var(--danger); }
 .btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn:disabled { opacity: .35; cursor: default; pointer-events: none; }
 
 /* ── 레이아웃 ─────────────────────── */
 #main { display: flex; flex: 1 1 auto; min-height: 0; }

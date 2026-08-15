@@ -142,6 +142,17 @@ export class Rack {
     return true;
   }
 
+  /** dir(+1 위 / -1 아래) 방향으로 가장 가까운 배치 가능 슬롯. 없으면 -1 */
+  nearestFreeSlot(id, dir) {
+    const inst = this.placed.get(id);
+    if (!inst) return -1;
+    const u = getType(inst.typeId).u;
+    for (let s = inst.slot + dir; s >= 0 && s + u <= this.totalU; s += dir) {
+      if (this.canPlace(s, u, id)) return s;
+    }
+    return -1;
+  }
+
   removeUnit(id) {
     const inst = this.placed.get(id);
     if (!inst) return;

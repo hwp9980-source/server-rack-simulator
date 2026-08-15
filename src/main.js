@@ -154,6 +154,8 @@ function selectUnit(id) {
     <tr><td>소비전력</td><td>${t.power ? t.power + ' W' : '—'}</td></tr>
     <tr><td>무게</td><td>${t.weight} kg</td></tr>
     <tr><td>가격</td><td>${fmtWon(t.price)}</td></tr>`;
+  document.getElementById('insp-up').disabled = rack.nearestFreeSlot(id, 1) < 0;
+  document.getElementById('insp-down').disabled = rack.nearestFreeSlot(id, -1) < 0;
   inspEl.classList.remove('hidden');
   updateSelBox();
 }
@@ -179,14 +181,17 @@ function persist() {
   updateSelBox();
 }
 
-document.getElementById('insp-up').onclick = () => {
-  const inst = rack.placed.get(selectedId);
-  if (inst && rack.moveUnit(selectedId, inst.slot + 1)) { selectUnit(selectedId); persist(); }
-};
-document.getElementById('insp-down').onclick = () => {
-  const inst = rack.placed.get(selectedId);
-  if (inst && rack.moveUnit(selectedId, inst.slot - 1)) { selectUnit(selectedId); persist(); }
-};
+// 위/아래 이동: 인접 칸이 차 있으면 장애물을 건너뛰어 다음 빈 자리로
+function nudgeUnit(dir) {
+  if (!selectedId) return;
+  const target = rack.nearestFreeSlot(selectedId, dir);
+  if (target >= 0 && rack.moveUnit(selectedId, target)) {
+    selectUnit(selectedId);
+    persist();
+  }
+}
+document.getElementById('insp-up').onclick = () => nudgeUnit(1);
+document.getElementById('insp-down').onclick = () => nudgeUnit(-1);
 document.getElementById('insp-remove').onclick = () => {
   rack.removeUnit(selectedId);
   selectUnit(null);
@@ -373,6 +378,12 @@ const CAM_KEYS = {
 };
 window.addEventListener('keydown', (e) => {
   if (['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
+  // Shift+↑/↓: 선택 유닛 이동 (카메라 회전보다 우선)
+  if (e.shiftKey && selectedId && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+    nudgeUnit(e.key === 'ArrowUp' ? 1 : -1);
+    e.preventDefault();
+    return;
+  }
   if (e.key === 'Home') { resetView(); e.preventDefault(); return; }
   const action = CAM_KEYS[e.key];
   if (action) { CAM_ACTIONS[action](); e.preventDefault(); }
