@@ -227,6 +227,12 @@ export const CATALOG = [
     power: 32, weight: 3.0, price: 1170000, accent: 0xb5b5b5, style: 'nas-tower',
     bays: 4, bayType: 'lff',
   },
+  {
+    id: 'synology-ds223', category: 'desktop', vendor: 'Synology',
+    name: 'DiskStation DS223', u: 0, width: 108, depth: 233, height: 165,
+    power: 17, weight: 1.28, price: 399000, accent: 0xb5b5b5, style: 'nas-tower',
+    bays: 2, bayType: 'lff',
+  },
 ];
 
 export function getType(id) {
