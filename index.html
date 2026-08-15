@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>서버랙 3D 시뮬레이터</title>
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- 상단 툴바 -->
+    <header id="toolbar">
+      <div class="brand">🗄️ 서버랙 3D 시뮬레이터</div>
+      <div class="toolbar-group">
+        <label for="rack-size">랙 크기</label>
+        <select id="rack-size">
+          <option value="12">12U</option>
+          <option value="24">24U</option>
+          <option value="42" selected>42U</option>
+          <option value="48">48U</option>
+        </select>
+      </div>
+      <div class="toolbar-group">
+        <button id="view-front" class="btn">정면</button>
+        <button id="view-rear" class="btn">후면</button>
+        <button id="view-iso" class="btn">사선</button>
+      </div>
+      <div class="toolbar-group right">
+        <button id="btn-export" class="btn">내보내기 (JSON)</button>
+        <button id="btn-import" class="btn">불러오기</button>
+        <input type="file" id="import-file" accept=".json" hidden />
+        <button id="btn-clear" class="btn danger">전체 비우기</button>
+      </div>
+    </header>
+
+    <div id="main">
+      <!-- 좌측: 구성품 카탈로그 -->
+      <aside id="catalog">
+        <div class="catalog-header">
+          <h2>구성품 카탈로그</h2>
+          <input type="search" id="catalog-search" placeholder="모델명 · 제조사 검색…" />
+          <div id="category-chips"></div>
+        </div>
+        <div id="catalog-list"></div>
+      </aside>
+
+      <!-- 중앙: 3D 뷰포트 -->
+      <div id="viewport">
+        <canvas id="canvas3d"></canvas>
+        <div id="placement-hint" class="hidden">
+          랙의 원하는 위치를 클릭해 장착 · <b>Shift</b>+클릭 연속 배치 · <b>ESC</b> 취소
+        </div>
+        <div id="stats-bar">
+          <span id="stat-units">0 / 42U</span>
+          <span id="stat-power">0 W</span>
+          <span id="stat-weight">0.0 kg</span>
+          <span id="stat-price">₩0</span>
+        </div>
+
+        <!-- 선택 유닛 정보 (오버레이) -->
+        <aside id="inspector" class="hidden">
+          <h2 id="insp-name"></h2>
+          <div id="insp-vendor" class="muted"></div>
+          <table id="insp-specs"></table>
+          <div class="insp-actions">
+            <button id="insp-up" class="btn">▲ 위로</button>
+            <button id="insp-down" class="btn">▼ 아래로</button>
+            <button id="insp-dup" class="btn">복제</button>
+            <button id="insp-remove" class="btn danger">제거</button>
+          </div>
+          <p class="muted small">드래그로 이동 · Delete 키로 제거</p>
+        </aside>
+      </div>
+    </div>
+  </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
