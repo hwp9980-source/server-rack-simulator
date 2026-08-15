@@ -309,11 +309,38 @@ document.getElementById('view-rear').onclick = () => flyTo([0, rackMidY(), -2.8]
 document.getElementById('view-iso').onclick = () => flyTo([1.9, rackMidY() + 0.6, 2.6], [0, rackMidY() - 0.2, 0]);
 
 /* ── 툴바 ───────────────────────────────────────────── */
-document.getElementById('rack-size').onchange = (e) => {
-  rack.resize(parseInt(e.target.value, 10));
+const RACK_MIN_U = 2, RACK_MAX_U = 60;
+const rackSizeInput = document.getElementById('rack-size');
+
+function syncRackSizeUI() {
+  rackSizeInput.value = String(rack.totalU);
+  document.querySelectorAll('.btn.preset').forEach((b) => {
+    b.classList.toggle('active', parseInt(b.dataset.u, 10) === rack.totalU);
+  });
+}
+
+function setRackSize(u) {
+  u = Math.max(RACK_MIN_U, Math.min(RACK_MAX_U, Math.round(u)));
+  if (Number.isNaN(u) || u === rack.totalU) { syncRackSizeUI(); return; }
+  // 줄어드는 크기에 들어가지 못하는 유닛 확인
+  const dropped = [...rack.placed.values()]
+    .filter((inst) => inst.slot + getType(inst.typeId).u > u).length;
+  if (dropped > 0 && !confirm(`${u}U로 줄이면 상단 구성품 ${dropped}개가 제거됩니다. 계속할까요?`)) {
+    syncRackSizeUI();
+    return;
+  }
+  rack.resize(u);
   selectUnit(null);
   persist();
-};
+  syncRackSizeUI();
+}
+
+rackSizeInput.addEventListener('change', () => setRackSize(parseInt(rackSizeInput.value, 10)));
+document.getElementById('rack-dec').onclick = () => setRackSize(rack.totalU - 1);
+document.getElementById('rack-inc').onclick = () => setRackSize(rack.totalU + 1);
+document.querySelectorAll('.btn.preset').forEach((b) => {
+  b.onclick = () => setRackSize(parseInt(b.dataset.u, 10));
+});
 
 document.getElementById('btn-clear').onclick = () => {
   if (rack.placed.size === 0 || confirm('랙의 모든 구성품을 제거할까요?')) {
@@ -340,7 +367,7 @@ importFile.onchange = async () => {
   try {
     const data = JSON.parse(await file.text());
     rack.load(data);
-    document.getElementById('rack-size').value = String(rack.totalU);
+    syncRackSizeUI();
     selectUnit(null);
     persist();
   } catch {
@@ -352,11 +379,9 @@ importFile.onchange = async () => {
 /* ── 저장된 구성 복원 ───────────────────────────────── */
 try {
   const saved = localStorage.getItem(STORAGE_KEY);
-  if (saved) {
-    rack.load(JSON.parse(saved));
-    document.getElementById('rack-size').value = String(rack.totalU);
-  }
+  if (saved) rack.load(JSON.parse(saved));
 } catch { /* 무시 */ }
+syncRackSizeUI();
 updateStats();
 
 // 콘솔/테스트 디버깅용 핸들

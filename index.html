@@ -13,12 +13,18 @@
       <div class="brand">🗄️ 서버랙 3D 시뮬레이터</div>
       <div class="toolbar-group">
         <label for="rack-size">랙 크기</label>
-        <select id="rack-size">
-          <option value="12">12U</option>
-          <option value="24">24U</option>
-          <option value="42" selected>42U</option>
-          <option value="48">48U</option>
-        </select>
+        <div id="rack-size-stepper">
+          <button id="rack-dec" class="btn step" title="1U 줄이기">−</button>
+          <input type="number" id="rack-size" min="2" max="60" step="1" value="42" />
+          <span class="unit-suffix">U</span>
+          <button id="rack-inc" class="btn step" title="1U 늘리기">+</button>
+        </div>
+        <div class="preset-group">
+          <button class="btn preset" data-u="12">12U</button>
+          <button class="btn preset" data-u="24">24U</button>
+          <button class="btn preset" data-u="42">42U</button>
+          <button class="btn preset" data-u="48">48U</button>
+        </div>
       </div>
       <div class="toolbar-group">
         <button id="view-front" class="btn">정면</button>
