@@ -93,6 +93,26 @@ export const CATALOG = [
     price: 780000, accent: 0x5b6770, style: 'switch', ports: 48,
   },
   {
+    id: 'mikrotik-crs326', category: 'network', vendor: 'MikroTik',
+    name: 'CRS326-24G-2S+RM', u: 1, depth: 166, power: 24, weight: 2.2,
+    price: 410000, accent: 0x5b6770, style: 'switch', ports: 26,
+  },
+  {
+    id: 'mikrotik-crs328', category: 'network', vendor: 'MikroTik',
+    name: 'CRS328-24P-4S+RM', u: 1, depth: 254, power: 44, weight: 3.5,
+    price: 850000, accent: 0x5b6770, style: 'switch', ports: 28,
+  },
+  {
+    id: 'mikrotik-crs518', category: 'network', vendor: 'MikroTik',
+    name: 'CRS518-16XS-2XQ-RM', u: 1, depth: 250, power: 95, weight: 3.9,
+    price: 2500000, accent: 0x5b6770, style: 'switch', ports: 18,
+  },
+  {
+    id: 'mikrotik-crs804', category: 'network', vendor: 'MikroTik',
+    name: 'CRS804-4DDQ-hRM', u: 1, depth: 387, power: 123, weight: 3.9,
+    price: 2550000, accent: 0x5b6770, style: 'switch', ports: 6,
+  },
+  {
     id: 'patch-24', category: 'network', vendor: 'Generic',
     name: 'Cat6 패치패널 24포트', u: 1, depth: 100, power: 0, weight: 1.2,
     price: 45000, accent: 0x444a55, style: 'patch', ports: 24,
