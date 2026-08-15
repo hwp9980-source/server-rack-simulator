@@ -1,20 +1,26 @@
 // 19인치 표준 랙 프레임 및 슬롯 관리
 import * as THREE from 'three';
-import { U, FACE_W, createUnitMesh } from './models.js';
+import { U, FACE_W, UNIT_W, createUnitMesh, createDesktopMesh } from './models.js';
 import { getType } from './catalog.js';
 
 const RACK_W = 0.6;    // 외형 폭 (m)
-const RACK_D = 1.0;    // 외형 깊이 (m)
 const BASE_H = 0.06;   // 하단 베이스 높이
 const POST = 0.05;     // 프레임 기둥 단면
+const DESK_MARGIN = 0.01;  // 선반 좌우 여백
+const DESK_GAP = 0.01;     // 선반 위 기기 간 간격
+const DESK_INSET = 0.02;   // 선반 앞쪽 여유(전면 돌출 방지)
 
 export class Rack {
-  constructor(scene, totalU = 42) {
+  constructor(scene, totalU = 42, depthMM = 1000) {
     this.scene = scene;
     this.totalU = totalU;
+    this.depthMM = depthMM;
+    this.frameOpacity = 1;
     this.group = new THREE.Group();
     this.unitsGroup = new THREE.Group();
-    this.placed = new Map();   // instanceId -> { id, typeId, slot, mesh }
+    this.placed = new Map();     // instanceId -> { id, typeId, slot, mesh }
+    this.deskPlaced = new Map(); // instanceId -> { id, typeId, shelfId, mesh } (선반 위 배치품)
+    this.shelfItems = new Map(); // shelfInstanceId -> [{ id, typeId, shelfId, mesh }, ...] (좌→우 순서)
     this.slots = [];           // slot index -> instanceId | null
     this.nextId = 1;
     scene.add(this.group);
@@ -22,20 +28,30 @@ export class Rack {
   }
 
   get innerBottom() { return BASE_H; }
-  get frontZ() { return RACK_D / 2; }
+  get depthM() { return this.depthMM / 1000; }
+  get frontZ() { return this.depthM / 2; }
 
   build() {
     this.group.clear();
     this.slots = new Array(this.totalU).fill(null);
     const H = this.totalU * U + BASE_H + 0.05;
+    const D = this.depthM;
 
-    const frameMat = new THREE.MeshStandardMaterial({ color: 0x3d434e, roughness: 0.5, metalness: 0.45 });
-    const railMat = new THREE.MeshStandardMaterial({ color: 0x4b5262, roughness: 0.4, metalness: 0.55 });
+    const frameMat = new THREE.MeshStandardMaterial({
+      color: 0x3d434e, roughness: 0.5, metalness: 0.45,
+      transparent: this.frameOpacity < 1, opacity: this.frameOpacity, depthWrite: this.frameOpacity >= 1,
+    });
+    const railMat = new THREE.MeshStandardMaterial({
+      color: 0x4b5262, roughness: 0.4, metalness: 0.55,
+      transparent: this.frameOpacity < 1, opacity: this.frameOpacity, depthWrite: this.frameOpacity >= 1,
+    });
+    this.frameMat = frameMat;
+    this.railMat = railMat;
 
     // 베이스 + 상판
-    const base = new THREE.Mesh(new THREE.BoxGeometry(RACK_W, BASE_H, RACK_D), frameMat);
+    const base = new THREE.Mesh(new THREE.BoxGeometry(RACK_W, BASE_H, D), frameMat);
     base.position.y = BASE_H / 2;
-    const top = new THREE.Mesh(new THREE.BoxGeometry(RACK_W, 0.04, RACK_D), frameMat);
+    const top = new THREE.Mesh(new THREE.BoxGeometry(RACK_W, 0.04, D), frameMat);
     top.position.y = H - 0.02;
     this.group.add(base, top);
 
@@ -43,7 +59,7 @@ export class Rack {
     for (const sx of [-1, 1]) {
       for (const sz of [-1, 1]) {
         const post = new THREE.Mesh(new THREE.BoxGeometry(POST, H - BASE_H - 0.04, POST), frameMat);
-        post.position.set(sx * (RACK_W / 2 - POST / 2), (H + BASE_H - 0.04) / 2, sz * (RACK_D / 2 - POST / 2));
+        post.position.set(sx * (RACK_W / 2 - POST / 2), (H + BASE_H - 0.04) / 2, sz * (D / 2 - POST / 2));
         post.castShadow = true;
         this.group.add(post);
       }
@@ -52,7 +68,7 @@ export class Rack {
     // 전면/후면 마운팅 레일 (19인치 규격 위치)
     const railH = this.totalU * U;
     for (const sx of [-1, 1]) {
-      for (const zPos of [RACK_D / 2 - 0.09, -RACK_D / 2 + 0.09]) {
+      for (const zPos of [D / 2 - 0.09, -D / 2 + 0.09]) {
         const rail = new THREE.Mesh(new THREE.BoxGeometry(0.018, railH, 0.012), railMat);
         rail.position.set(sx * (FACE_W / 2 + 0.006), BASE_H + railH / 2, zPos);
         this.group.add(rail);
@@ -65,7 +81,7 @@ export class Rack {
       new THREE.PlaneGeometry(0.022, railH),
       new THREE.MeshBasicMaterial({ map: labelTex, transparent: true })
     );
-    labelPlane.position.set(-(FACE_W / 2 + 0.028), BASE_H + railH / 2, RACK_D / 2 - 0.083);
+    labelPlane.position.set(-(FACE_W / 2 + 0.028), BASE_H + railH / 2, D / 2 - 0.083);
     this.group.add(labelPlane);
 
     this.group.add(this.unitsGroup);
@@ -73,7 +89,7 @@ export class Rack {
     // 배치용 레이캐스트 대상 (전면 개구부를 덮는 투명 박스)
     const pickGeo = new THREE.BoxGeometry(FACE_W, railH, 0.06);
     this.pickBox = new THREE.Mesh(pickGeo, new THREE.MeshBasicMaterial({ visible: false }));
-    this.pickBox.position.set(0, BASE_H + railH / 2, RACK_D / 2 - 0.03);
+    this.pickBox.position.set(0, BASE_H + railH / 2, D / 2 - 0.03);
     this.group.add(this.pickBox);
   }
 
@@ -156,6 +172,9 @@ export class Rack {
   removeUnit(id) {
     const inst = this.placed.get(id);
     if (!inst) return;
+    // 선반 위에 배치된 기기도 함께 정리 (메시는 부모 제거로 자동 정리됨)
+    for (const item of this.shelfItems.get(id) || []) this.deskPlaced.delete(item.id);
+    this.shelfItems.delete(id);
     this.unitsGroup.remove(inst.mesh);
     for (let i = 0; i < this.totalU; i++) if (this.slots[i] === id) this.slots[i] = null;
     this.placed.delete(id);
@@ -163,9 +182,67 @@ export class Rack {
 
   clear() {
     for (const id of [...this.placed.keys()]) this.removeUnit(id);
+    this.deskPlaced.clear();
+    this.shelfItems.clear();
   }
 
-  /** 랙 크기 변경 — 들어갈 수 있는 유닛은 유지 */
+  /** 선반 위에 데스크탑형 기기를 배치할 수 있는지(폭 여유) 확인 */
+  canAddDeskItem(shelfId, typeId) {
+    const shelfInst = this.placed.get(shelfId);
+    const shelfType = shelfInst && getType(shelfInst.typeId);
+    if (!shelfInst || !shelfType || shelfType.style !== 'shelf') return false;
+    const type = getType(typeId);
+    if (!type) return false;
+    const list = this.shelfItems.get(shelfId) || [];
+    const usedW = list.reduce((sum, it) => sum + getType(it.typeId).width / 1000 + DESK_GAP, 0);
+    return usedW + type.width / 1000 <= UNIT_W - DESK_MARGIN * 2;
+  }
+
+  /** 선반(style: 'shelf') 위에 데스크탑형 기기를 좌→우로 이어붙여 배치 */
+  addDeskItem(shelfId, typeId) {
+    if (!this.canAddDeskItem(shelfId, typeId)) return null;
+    const shelfInst = this.placed.get(shelfId);
+    const type = getType(typeId);
+    const list = this.shelfItems.get(shelfId) || [];
+    const usedW = list.reduce((sum, it) => sum + getType(it.typeId).width / 1000 + DESK_GAP, 0);
+    const w = type.width / 1000;
+    const d = Math.max(type.depth / 1000, 0.02);
+    const x = -UNIT_W / 2 + DESK_MARGIN + usedW + w / 2;
+    const id = this.nextId++;
+    const mesh = createDesktopMesh(type);
+    mesh.position.set(x, 0.012, -(DESK_INSET + d / 2));
+    mesh.userData.instanceId = id;
+    shelfInst.mesh.add(mesh);
+    const item = { id, typeId, shelfId, mesh };
+    this.deskPlaced.set(id, item);
+    list.push(item);
+    this.shelfItems.set(shelfId, list);
+    return item;
+  }
+
+  removeDeskItem(id) {
+    const item = this.deskPlaced.get(id);
+    if (!item) return;
+    item.mesh.parent?.remove(item.mesh);
+    this.deskPlaced.delete(id);
+    const list = this.shelfItems.get(item.shelfId) || [];
+    const idx = list.findIndex((it) => it.id === id);
+    if (idx >= 0) list.splice(idx, 1);
+    this.repackShelf(item.shelfId);
+  }
+
+  /** 선반 위 기기들을 좌→우로 빈틈없이 재배치 (제거 후 호출) */
+  repackShelf(shelfId) {
+    const list = this.shelfItems.get(shelfId) || [];
+    let x = -UNIT_W / 2 + DESK_MARGIN;
+    for (const it of list) {
+      const w = getType(it.typeId).width / 1000;
+      it.mesh.position.x = x + w / 2;
+      x += w + DESK_GAP;
+    }
+  }
+
+  /** 랙 크기(U) 변경 — 들어갈 수 있는 유닛은 유지 */
   resize(totalU) {
     const saved = this.serialize().units;
     this.clear();
@@ -173,33 +250,70 @@ export class Rack {
     this.build();
     for (const u of saved) {
       const type = getType(u.typeId);
-      if (type && u.slot + type.u <= totalU) this.addUnit(u.typeId, u.slot);
+      if (type && u.slot + type.u <= totalU) {
+        const inst = this.addUnit(u.typeId, u.slot);
+        if (inst) for (const dtId of u.deskItems || []) this.addDeskItem(inst.id, dtId);
+      }
+    }
+  }
+
+  /** 프레임(베이스·상판·기둥·레일) 투명도 설정. opacity: 0(완전 투명)~1(불투명) */
+  setFrameOpacity(opacity) {
+    this.frameOpacity = Math.max(0, Math.min(1, opacity));
+    for (const mat of [this.frameMat, this.railMat]) {
+      if (!mat) continue;
+      mat.transparent = this.frameOpacity < 1;
+      mat.opacity = this.frameOpacity;
+      mat.depthWrite = this.frameOpacity >= 1;
+      mat.needsUpdate = true;
+    }
+  }
+
+  /** 랙 깊이(mm) 변경 — 배치된 유닛은 그대로 유지(깊이 초과 시 후면이 돌출될 수 있음) */
+  resizeDepth(depthMM) {
+    const saved = this.serialize().units;
+    this.clear();
+    this.depthMM = depthMM;
+    this.build();
+    for (const u of saved) {
+      const inst = this.addUnit(u.typeId, u.slot);
+      if (inst) for (const dtId of u.deskItems || []) this.addDeskItem(inst.id, dtId);
     }
   }
 
   serialize() {
     return {
       rackU: this.totalU,
+      rackDepth: this.depthMM,
       units: [...this.placed.values()]
         .sort((a, b) => a.slot - b.slot)
-        .map((u) => ({ typeId: u.typeId, slot: u.slot })),
+        .map((u) => ({
+          typeId: u.typeId,
+          slot: u.slot,
+          deskItems: (this.shelfItems.get(u.id) || []).map((it) => it.typeId),
+        })),
     };
   }
 
   load(data) {
     this.clear();
-    if (data.rackU && data.rackU !== this.totalU) {
-      this.totalU = data.rackU;
-      this.build();
+    let rebuild = false;
+    if (data.rackU && data.rackU !== this.totalU) { this.totalU = data.rackU; rebuild = true; }
+    if (data.rackDepth && data.rackDepth !== this.depthMM) { this.depthMM = data.rackDepth; rebuild = true; }
+    if (rebuild) this.build();
+    for (const u of data.units || []) {
+      const inst = this.addUnit(u.typeId, u.slot);
+      if (inst) for (const dtId of u.deskItems || []) this.addDeskItem(inst.id, dtId);
     }
-    for (const u of data.units || []) this.addUnit(u.typeId, u.slot);
   }
 
-  /** 레이캐스트 히트 → 소속 유닛 인스턴스 */
+  /** 레이캐스트 히트 → 소속 유닛/선반 배치품 인스턴스 (자식이 우선) */
   instanceFromObject(obj) {
     let o = obj;
     while (o) {
-      if (o.userData?.instanceId) return this.placed.get(o.userData.instanceId);
+      if (o.userData?.instanceId) {
+        return this.placed.get(o.userData.instanceId) || this.deskPlaced.get(o.userData.instanceId) || null;
+      }
       o = o.parent;
     }
     return null;
@@ -210,6 +324,10 @@ export class Rack {
     for (const inst of this.placed.values()) {
       const t = getType(inst.typeId);
       usedU += t.u; power += t.power; weight += t.weight; price += t.price;
+    }
+    for (const item of this.deskPlaced.values()) {
+      const t = getType(item.typeId);
+      power += t.power; weight += t.weight; price += t.price;
     }
     return { usedU, power, weight, price, totalU: this.totalU };
   }

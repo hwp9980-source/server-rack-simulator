@@ -69,17 +69,20 @@ export function createUnitMesh(type) {
   const faceMat = mat(0x272b32, { roughness: 0.5 });
   const accentMat = mat(type.accent, { roughness: 0.4 });
 
-  // 섀시 본체 (전면 플레이트보다 뒤로)
-  if (type.style !== 'blank' && type.style !== 'cable') {
+  // 섀시 본체 (전면 플레이트보다 뒤로) — 선반은 얇은 트레이(slab)로 별도 표현하므로 제외
+  if (type.style !== 'blank' && type.style !== 'cable' && type.style !== 'shelf') {
     const body = box(UNIT_W, h, d, chassisMat);
     body.position.set(0, cy, -d / 2);
     g.add(body);
   }
 
-  // 전면 플레이트 (랙 귀 포함 폭)
+  // 전면 플레이트 (랙 귀 포함 폭) — 선반은 위에 놓인 기기가 가려지지 않도록 짧은 앞턱만 표현
   const faceD = 0.012;
-  const face = box(FACE_W, h, faceD, faceMat);
-  face.position.set(0, cy, faceD / 2);
+  const isShelf = type.style === 'shelf';
+  const faceH = isShelf ? 0.011 : h;
+  const faceY = isShelf ? 0.0055 : cy;
+  const face = box(FACE_W, faceH, faceD, faceMat);
+  face.position.set(0, faceY, faceD / 2);
   g.add(face);
   const faceZ = faceD + 0.001; // 디테일 표면 z
 
@@ -252,4 +255,131 @@ function addKvmFront(g, type, h, cy, z) {
   addFrontDetail(g, handle, 0, cy - h * 0.18, z + 0.003);
   const slot = box(UNIT_W * 0.85, 0.003, 0.002, mat(0x0c0e11));
   addFrontDetail(g, slot, 0, cy + h * 0.22, z);
+}
+
+/* ── 선반 위 데스크탑형 기기 (랙 슬롯을 차지하지 않음) ─────── */
+
+/**
+ * 데스크탑형 기기(노트북·ATX PC·공유기·미니PC·타워형 NAS) 메시 생성.
+ * 그룹 원점: 기기 바닥 앞면 중앙, 전면이 +z, 후면이 -z.
+ */
+export function createDesktopMesh(type) {
+  const g = new THREE.Group();
+  const w = type.width / 1000;
+  const d = Math.max(type.depth / 1000, 0.02);
+  const h = Math.max(type.height / 1000, 0.01);
+
+  switch (type.style) {
+    case 'laptop': addLaptopModel(g, w, d, h, type); break;
+    case 'tower': addTowerModel(g, w, d, h, type); break;
+    case 'router': addRouterModel(g, w, d, h, type); break;
+    case 'mini': addMiniModel(g, w, d, h, type); break;
+    case 'nas-tower': addNasTowerModel(g, w, d, h, type); break;
+    default: {
+      const body = box(w, h, d, mat(type.accent, { roughness: 0.5 }));
+      body.position.set(0, h / 2, -d / 2);
+      g.add(body);
+    }
+  }
+
+  g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  return g;
+}
+
+function addLaptopModel(g, w, d, h, type) {
+  const bodyMat = mat(0x2b2e34, { roughness: 0.4, metalness: 0.5 });
+  const screenMat = mat(0x0a1a2e, { roughness: 0.2, metalness: 0.1, emissive: 0x1a3a5c });
+  const accentMat = mat(type.accent, { roughness: 0.3, metalness: 0.6 });
+  // 키보드 베이스
+  const base = box(w, h, d, bodyMat);
+  base.position.set(0, h / 2, -d / 2);
+  g.add(base);
+  // 뒤로 살짝 기울어 세워진 화면
+  const screenH = d * 0.82;
+  const screen = box(w * 0.96, screenH, 0.01, screenMat);
+  screen.position.set(0, h + screenH * 0.46, -d + 0.015);
+  screen.rotation.x = -0.24;
+  g.add(screen);
+  // 로고 포인트
+  const logo = box(0.018, 0.012, 0.003, accentMat);
+  logo.position.set(0, h + screenH * 0.78, -d + 0.022);
+  logo.rotation.x = -0.24;
+  g.add(logo);
+}
+
+function addTowerModel(g, w, d, h, type) {
+  const bodyMat = mat(0x2a2d33, { roughness: 0.5, metalness: 0.4 });
+  const meshMat = mat(0x14161a, { roughness: 0.7 });
+  const glassMat = mat(0x0d1b26, { roughness: 0.15, metalness: 0.1 });
+  const body = box(w, h, d, bodyMat);
+  body.position.set(0, h / 2, -d / 2);
+  g.add(body);
+  // 전면 통풍 매쉬
+  const vent = box(w * 0.72, h * 0.5, 0.006, meshMat);
+  vent.position.set(0, h * 0.36, 0.003);
+  g.add(vent);
+  // 측면 강화유리 패널
+  const glass = box(0.006, h * 0.82, d * 0.82, glassMat);
+  glass.position.set(w / 2 - 0.004, h * 0.52, -d / 2);
+  g.add(glass);
+  // 전원 LED
+  const led = box(0.006, 0.006, 0.004, mat(type.accent, { emissive: type.accent }));
+  led.position.set(0, h * 0.08, 0.005);
+  g.add(led);
+}
+
+function addRouterModel(g, w, d, h, type) {
+  const bodyMat = mat(0x1c1f26, { roughness: 0.55 });
+  const ledMat = mat(0x39d353, { emissive: 0x2aa940 });
+  const antMat = mat(0x111318, { roughness: 0.4, metalness: 0.5 });
+  const body = box(w, h, d, bodyMat);
+  body.position.set(0, h / 2, -d / 2);
+  g.add(body);
+  const antN = 4;
+  for (let i = 0; i < antN; i++) {
+    const ant = box(0.007, h * 2.4, 0.007, antMat);
+    ant.position.set(-w / 2 + 0.02 + i * ((w - 0.04) / (antN - 1)), h + h * 1.15, -d / 2);
+    ant.rotation.z = (i - (antN - 1) / 2) * 0.14;
+    g.add(ant);
+  }
+  for (let i = 0; i < 5; i++) {
+    const led = box(0.004, 0.004, 0.002, ledMat);
+    led.position.set(-w / 2 + 0.02 + i * 0.02, h * 0.62, 0.001);
+    g.add(led);
+  }
+}
+
+function addMiniModel(g, w, d, h, type) {
+  const bodyMat = mat(type.accent, { roughness: 0.35, metalness: 0.55 });
+  const ventMat = mat(0x0e1013, { roughness: 0.6 });
+  const body = box(w, h, d, bodyMat);
+  body.position.set(0, h / 2, -d / 2);
+  g.add(body);
+  const vent = box(w * 0.8, 0.003, d * 0.8, ventMat);
+  vent.position.set(0, h + 0.0016, -d / 2);
+  g.add(vent);
+  const led = box(0.01, 0.01, 0.003, mat(0xffffff, { emissive: 0xaaaaaa }));
+  led.position.set(0, h * 0.5, 0.002);
+  g.add(led);
+}
+
+function addNasTowerModel(g, w, d, h, type) {
+  const bodyMat = mat(0x2a2e36, { roughness: 0.5 });
+  const bayMat = mat(0x1a1c20, { roughness: 0.4 });
+  const ledMat = mat(0x33ccff, { emissive: 0x1899cc });
+  const body = box(w, h, d, bodyMat);
+  body.position.set(0, h / 2, -d / 2);
+  g.add(body);
+  const bays = type.bays || 4;
+  const bh = (h * 0.82) / bays - 0.004;
+  const bw = w * 0.7;
+  for (let i = 0; i < bays; i++) {
+    const by = h * 0.92 - i * (bh + 0.004) - bh / 2;
+    const bay = box(bw, bh, 0.006, bayMat);
+    bay.position.set(0, by, 0.003);
+    g.add(bay);
+    const led = box(0.004, 0.004, 0.002, ledMat);
+    led.position.set(bw / 2 - 0.008, by, 0.006);
+    g.add(led);
+  }
 }

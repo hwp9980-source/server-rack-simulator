@@ -27,9 +27,30 @@
         </div>
       </div>
       <div class="toolbar-group">
+        <label for="rack-depth">랙 깊이</label>
+        <div id="rack-depth-stepper">
+          <button id="depth-dec" class="btn step" title="50mm 줄이기">−</button>
+          <input type="number" id="rack-depth" min="500" max="1200" step="50" value="1000" />
+          <span class="unit-suffix">mm</span>
+          <button id="depth-inc" class="btn step" title="50mm 늘리기">+</button>
+        </div>
+        <div class="preset-group">
+          <button class="btn preset-depth" data-d="600">600</button>
+          <button class="btn preset-depth" data-d="800">800</button>
+          <button class="btn preset-depth" data-d="1000">1000</button>
+          <button class="btn preset-depth" data-d="1200">1200</button>
+        </div>
+      </div>
+      <div class="toolbar-group">
         <button id="view-front" class="btn">정면</button>
         <button id="view-rear" class="btn">후면</button>
         <button id="view-iso" class="btn">사선</button>
+      </div>
+      <div class="toolbar-group">
+        <label class="toggle-label">
+          <input type="checkbox" id="frame-transparent" />
+          프레임 투명화
+        </label>
       </div>
       <div class="toolbar-group right">
         <button id="btn-export" class="btn">내보내기 (JSON)</button>

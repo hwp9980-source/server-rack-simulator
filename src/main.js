@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { CATALOG, CATEGORIES, getType } from './catalog.js';
 import { Rack } from './rack.js';
-import { U, FACE_W } from './models.js';
+import { U, FACE_W, UNIT_W } from './models.js';
 
 const STORAGE_KEY = 'rack-sim-config-v1';
 
@@ -58,7 +58,7 @@ grid.position.y = 0.001;
 scene.add(grid);
 
 /* ── 랙 & 고스트 ────────────────────────────────────── */
-let rack = new Rack(scene, 42);
+let rack = new Rack(scene, 42, 1000);
 
 const ghostMat = new THREE.MeshStandardMaterial({
   color: 0x3fb950, transparent: true, opacity: 0.4, depthWrite: false,
@@ -77,6 +77,7 @@ let selectedId = null;       // 선택된 배치 유닛
 let dragging = null;         // { id, origSlot, moved }
 let hoverSlot = -1;
 let hoverValid = false;
+let hoverShelfId = null;     // 데스크탑형 배치 모드에서 호버 중인 선반 id
 
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
@@ -112,7 +113,7 @@ function renderCatalog() {
       <div class="uc-top">
         <span class="uc-dot" style="background:#${t.accent.toString(16).padStart(6, '0')}"></span>
         <span class="uc-name">${t.vendor} ${t.name}</span>
-        <span class="uc-u">${t.u}U</span>
+        <span class="uc-u">${t.u > 0 ? t.u + 'U' : '선반형'}</span>
       </div>
       <div class="uc-meta">
         <span>${t.power ? t.power + 'W' : '—'}</span>
@@ -127,7 +128,18 @@ function renderCatalog() {
 function togglePlacing(type) {
   placingType = placingType?.id === type.id ? null : type;
   selectUnit(null);
-  document.getElementById('placement-hint').classList.toggle('hidden', !placingType);
+  const hintEl = document.getElementById('placement-hint');
+  hintEl.classList.toggle('hidden', !placingType);
+  if (placingType) {
+    if (placingType.category === 'desktop') {
+      const hasShelf = [...rack.placed.values()].some((inst) => getType(inst.typeId).style === 'shelf');
+      hintEl.innerHTML = hasShelf
+        ? '선반 위 빈 자리를 클릭해 배치 · <b>Shift</b>+클릭 연속 배치 · <b>ESC</b> 취소'
+        : '먼저 카탈로그에서 <b>고정 선반</b>을 랙에 배치하세요';
+    } else {
+      hintEl.innerHTML = '랙의 원하는 위치를 클릭해 장착 · <b>Shift</b>+클릭 연속 배치 · <b>ESC</b> 취소';
+    }
+  }
   if (!placingType) ghost.visible = false;
   renderCatalog();
 }
@@ -142,26 +154,38 @@ const inspEl = document.getElementById('inspector');
 function selectUnit(id) {
   selectedId = id;
   if (!id) { inspEl.classList.add('hidden'); selBox.visible = false; return; }
-  const inst = rack.placed.get(id);
+  const deskItem = rack.deskPlaced.get(id);
+  const inst = deskItem || rack.placed.get(id);
   if (!inst) return;
   const t = getType(inst.typeId);
   document.getElementById('insp-name').textContent = t.name;
   document.getElementById('insp-vendor').textContent = t.vendor;
-  document.getElementById('insp-specs').innerHTML = `
-    <tr><td>위치</td><td>${inst.slot + 1}U ~ ${inst.slot + t.u}U</td></tr>
-    <tr><td>높이</td><td>${t.u}U</td></tr>
-    <tr><td>깊이</td><td>${t.depth} mm</td></tr>
-    <tr><td>소비전력</td><td>${t.power ? t.power + ' W' : '—'}</td></tr>
-    <tr><td>무게</td><td>${t.weight} kg</td></tr>
-    <tr><td>가격</td><td>${fmtWon(t.price)}</td></tr>`;
-  document.getElementById('insp-up').disabled = rack.nearestFreeSlot(id, 1) < 0;
-  document.getElementById('insp-down').disabled = rack.nearestFreeSlot(id, -1) < 0;
+  if (deskItem) {
+    document.getElementById('insp-specs').innerHTML = `
+      <tr><td>배치 위치</td><td>선반 위</td></tr>
+      <tr><td>크기(W×D×H)</td><td>${t.width}×${t.depth}×${t.height} mm</td></tr>
+      <tr><td>소비전력</td><td>${t.power ? t.power + ' W' : '—'}</td></tr>
+      <tr><td>무게</td><td>${t.weight} kg</td></tr>
+      <tr><td>가격</td><td>${fmtWon(t.price)}</td></tr>`;
+    document.getElementById('insp-up').disabled = true;
+    document.getElementById('insp-down').disabled = true;
+  } else {
+    document.getElementById('insp-specs').innerHTML = `
+      <tr><td>위치</td><td>${inst.slot + 1}U ~ ${inst.slot + t.u}U</td></tr>
+      <tr><td>높이</td><td>${t.u}U</td></tr>
+      <tr><td>깊이</td><td>${t.depth} mm</td></tr>
+      <tr><td>소비전력</td><td>${t.power ? t.power + ' W' : '—'}</td></tr>
+      <tr><td>무게</td><td>${t.weight} kg</td></tr>
+      <tr><td>가격</td><td>${fmtWon(t.price)}</td></tr>`;
+    document.getElementById('insp-up').disabled = rack.nearestFreeSlot(id, 1) < 0;
+    document.getElementById('insp-down').disabled = rack.nearestFreeSlot(id, -1) < 0;
+  }
   inspEl.classList.remove('hidden');
   updateSelBox();
 }
 
 function updateSelBox() {
-  const inst = selectedId && rack.placed.get(selectedId);
+  const inst = selectedId && (rack.placed.get(selectedId) || rack.deskPlaced.get(selectedId));
   if (!inst) { selBox.visible = false; return; }
   selBox.box.setFromObject(inst.mesh);
   selBox.visible = true;
@@ -181,9 +205,9 @@ function persist() {
   updateSelBox();
 }
 
-// 위/아래 이동: 인접 칸이 차 있으면 장애물을 건너뛰어 다음 빈 자리로
+// 위/아래 이동: 인접 칸이 차 있으면 장애물을 건너뛰어 다음 빈 자리로 (랙 유닛에만 적용)
 function nudgeUnit(dir) {
-  if (!selectedId) return;
+  if (!selectedId || !rack.placed.has(selectedId)) return;
   const target = rack.nearestFreeSlot(selectedId, dir);
   if (target >= 0 && rack.moveUnit(selectedId, target)) {
     selectUnit(selectedId);
@@ -193,11 +217,19 @@ function nudgeUnit(dir) {
 document.getElementById('insp-up').onclick = () => nudgeUnit(1);
 document.getElementById('insp-down').onclick = () => nudgeUnit(-1);
 document.getElementById('insp-remove').onclick = () => {
-  rack.removeUnit(selectedId);
+  if (rack.deskPlaced.has(selectedId)) rack.removeDeskItem(selectedId);
+  else rack.removeUnit(selectedId);
   selectUnit(null);
   persist();
 };
 document.getElementById('insp-dup').onclick = () => {
+  const deskItem = rack.deskPlaced.get(selectedId);
+  if (deskItem) {
+    const ni = rack.addDeskItem(deskItem.shelfId, deskItem.typeId);
+    if (ni) { selectUnit(ni.id); persist(); }
+    else alert('선반에 더 이상 공간이 없습니다.');
+    return;
+  }
   const inst = rack.placed.get(selectedId);
   if (!inst) return;
   const t = getType(inst.typeId);
@@ -237,10 +269,45 @@ function showGhost(type, ignoreId = null) {
   ghost.visible = true;
 }
 
+// 선반(style: 'shelf') 인스턴스 레이캐스트 — 선반의 얇은 트레이 형상이 아니라
+// 배치용 대형 히트박스(pickBox)로 슬롯을 찾은 뒤 그 슬롯의 유닛이 선반인지 확인한다
+// (선반 위 기기 클릭 시에도 아래 선반을 항상 안정적으로 인식할 수 있도록)
+function raycastShelf() {
+  const hits = raycaster.intersectObject(rack.pickBox);
+  if (!hits.length) return null;
+  const slot = rack.slotFromY(hits[0].point.y, 1);
+  const id = rack.slots[slot];
+  if (!id) return null;
+  const inst = rack.placed.get(id);
+  return inst && getType(inst.typeId).style === 'shelf' ? inst : null;
+}
+
+// 선반 위 데스크탑형 기기 배치 고스트 (좌→우로 이어붙는 다음 자리에 미리보기)
+function showDeskGhost(type) {
+  const shelfInst = raycastShelf();
+  if (!shelfInst) { ghost.visible = false; hoverShelfId = null; return; }
+  hoverShelfId = shelfInst.id;
+  hoverValid = rack.canAddDeskItem(shelfInst.id, type.id);
+  const list = rack.shelfItems.get(shelfInst.id) || [];
+  const DESK_MARGIN = 0.01, DESK_GAP = 0.01;
+  const usedW = list.reduce((sum, it) => sum + getType(it.typeId).width / 1000 + DESK_GAP, 0);
+  const w = type.width / 1000, d = Math.max(type.depth / 1000, 0.02), h = Math.max(type.height / 1000, 0.01);
+  const x = -UNIT_W / 2 + DESK_MARGIN + usedW + w / 2;
+  ghost.scale.set(w, h, d);
+  ghost.position.set(
+    shelfInst.mesh.position.x + x,
+    shelfInst.mesh.position.y + 0.012 + h / 2,
+    shelfInst.mesh.position.z - (0.02 + d / 2)
+  );
+  ghostMat.color.set(hoverValid ? 0x3fb950 : 0xe5534b);
+  ghost.visible = true;
+}
+
 canvas.addEventListener('pointermove', (e) => {
   setPointer(e);
   if (placingType) {
-    showGhost(placingType);
+    if (placingType.category === 'desktop') showDeskGhost(placingType);
+    else showGhost(placingType);
   } else if (dragging) {
     dragging.moved = true;
     const t = getType(rack.placed.get(dragging.id).typeId);
@@ -255,8 +322,10 @@ canvas.addEventListener('pointerdown', (e) => {
   const inst = hits.length ? rack.instanceFromObject(hits[0].object) : null;
   if (inst) {
     selectUnit(inst.id);
-    dragging = { id: inst.id, origSlot: inst.slot, moved: false };
-    controls.enabled = false;
+    if (rack.placed.has(inst.id)) {
+      dragging = { id: inst.id, origSlot: inst.slot, moved: false };
+      controls.enabled = false;
+    }
   } else {
     selectUnit(null);
   }
@@ -276,13 +345,24 @@ canvas.addEventListener('pointerup', (e) => {
   }
   if (placingType && e.button === 0) {
     setPointer(e);
-    showGhost(placingType);
-    if (hoverSlot >= 0 && hoverValid) {
-      const inst = rack.addUnit(placingType.id, hoverSlot);
-      persist();
-      if (!e.shiftKey) togglePlacing(placingType); // 모드 해제
-      else showGhost(placingType);
-      if (inst && !placingType) selectUnit(inst.id);
+    if (placingType.category === 'desktop') {
+      showDeskGhost(placingType);
+      if (hoverShelfId && hoverValid) {
+        const item = rack.addDeskItem(hoverShelfId, placingType.id);
+        persist();
+        if (!e.shiftKey) togglePlacing(placingType);
+        else showDeskGhost(placingType);
+        if (item && !placingType) selectUnit(item.id);
+      }
+    } else {
+      showGhost(placingType);
+      if (hoverSlot >= 0 && hoverValid) {
+        const inst = rack.addUnit(placingType.id, hoverSlot);
+        persist();
+        if (!e.shiftKey) togglePlacing(placingType); // 모드 해제
+        else showGhost(placingType);
+        if (inst && !placingType) selectUnit(inst.id);
+      }
     }
   }
 });
@@ -293,7 +373,8 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && placingType) togglePlacing(placingType);
   if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId
       && !['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName)) {
-    rack.removeUnit(selectedId);
+    if (rack.deskPlaced.has(selectedId)) rack.removeDeskItem(selectedId);
+    else rack.removeUnit(selectedId);
     selectUnit(null);
     persist();
   }
@@ -421,6 +502,43 @@ document.getElementById('rack-dec').onclick = () => setRackSize(rack.totalU - 1)
 document.getElementById('rack-inc').onclick = () => setRackSize(rack.totalU + 1);
 document.querySelectorAll('.btn.preset').forEach((b) => {
   b.onclick = () => setRackSize(parseInt(b.dataset.u, 10));
+});
+
+const RACK_MIN_DEPTH = 500, RACK_MAX_DEPTH = 1200, RACK_DEPTH_STEP = 50;
+const rackDepthInput = document.getElementById('rack-depth');
+
+function syncRackDepthUI() {
+  rackDepthInput.value = String(rack.depthMM);
+  document.querySelectorAll('.btn.preset-depth').forEach((b) => {
+    b.classList.toggle('active', parseInt(b.dataset.d, 10) === rack.depthMM);
+  });
+}
+
+function setRackDepth(mm) {
+  mm = Math.max(RACK_MIN_DEPTH, Math.min(RACK_MAX_DEPTH, Math.round(mm / RACK_DEPTH_STEP) * RACK_DEPTH_STEP));
+  if (Number.isNaN(mm) || mm === rack.depthMM) { syncRackDepthUI(); return; }
+  // 랙보다 깊은 구성품이 있으면 후면 돌출 경고
+  const deeper = [...rack.placed.values()]
+    .filter((inst) => getType(inst.typeId).depth > mm).length;
+  if (deeper > 0 && !confirm(`${mm}mm로 줄이면 랙보다 깊은 구성품 ${deeper}개의 후면이 랙 밖으로 돌출됩니다. 계속할까요?`)) {
+    syncRackDepthUI();
+    return;
+  }
+  rack.resizeDepth(mm);
+  updateSelBox();
+  persist();
+  syncRackDepthUI();
+}
+
+rackDepthInput.addEventListener('change', () => setRackDepth(parseInt(rackDepthInput.value, 10)));
+document.getElementById('depth-dec').onclick = () => setRackDepth(rack.depthMM - RACK_DEPTH_STEP);
+document.getElementById('depth-inc').onclick = () => setRackDepth(rack.depthMM + RACK_DEPTH_STEP);
+document.querySelectorAll('.btn.preset-depth').forEach((b) => {
+  b.onclick = () => setRackDepth(parseInt(b.dataset.d, 10));
+});
+
+document.getElementById('frame-transparent').addEventListener('change', (e) => {
+  rack.setFrameOpacity(e.target.checked ? 0.12 : 1);
 });
 
 document.getElementById('btn-clear').onclick = () => {

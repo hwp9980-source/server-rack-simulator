@@ -9,6 +9,7 @@ export const CATEGORIES = [
   { id: 'network', label: '네트워크' },
   { id: 'power',   label: '전원' },
   { id: 'misc',    label: '기타' },
+  { id: 'desktop', label: '데스크탑(선반형)' },
 ];
 
 export const CATALOG = [
@@ -113,6 +114,16 @@ export const CATALOG = [
     price: 2550000, accent: 0x5b6770, style: 'switch', ports: 6,
   },
   {
+    id: 'tplink-sg3428', category: 'network', vendor: 'TP-Link',
+    name: 'JetStream TL-SG3428', u: 1, depth: 180, power: 19, weight: 3.0,
+    price: 320000, accent: 0x4c8bf5, style: 'switch', ports: 28,
+  },
+  {
+    id: 'tplink-sg3210xhp', category: 'network', vendor: 'TP-Link',
+    name: 'JetStream TL-SG3210XHP-M2', u: 1, depth: 180, power: 260, weight: 2.5,
+    price: 480000, accent: 0x4c8bf5, style: 'switch', ports: 10,
+  },
+  {
     id: 'patch-24', category: 'network', vendor: 'Generic',
     name: 'Cat6 패치패널 24포트', u: 1, depth: 100, power: 0, weight: 1.2,
     price: 45000, accent: 0x444a55, style: 'patch', ports: 24,
@@ -165,6 +176,56 @@ export const CATALOG = [
     id: 'blank-2u', category: 'misc', vendor: 'Generic',
     name: '블랭크 패널 2U', u: 2, depth: 20, power: 0, weight: 0.5,
     price: 14000, accent: 0x262a33, style: 'blank',
+  },
+
+  // ── 데스크탑(선반형) — 랙 슬롯이 아닌 선반(shelf) 위에 배치 ─────
+  // u: 0 (랙 슬롯 비점유), width/depth/height(mm)로 실제 크기 표현
+  {
+    id: 'laptop-15', category: 'desktop', vendor: 'Generic',
+    name: '15.6인치 업무용 노트북', u: 0, width: 358, depth: 245, height: 20,
+    power: 65, weight: 1.8, price: 1200000, accent: 0x4f8cff, style: 'laptop',
+  },
+  {
+    id: 'atx-tower', category: 'desktop', vendor: 'Fractal Design',
+    name: 'Define 7 ATX 미들타워', u: 0, width: 240, depth: 465, height: 543,
+    power: 450, weight: 13.4, price: 259000, accent: 0x8a8f99, style: 'tower',
+  },
+  {
+    id: 'wifi-router', category: 'desktop', vendor: 'ASUS',
+    name: 'RT-AX88U PRO 공유기', u: 0, width: 305, depth: 161, height: 55,
+    power: 24, weight: 0.86, price: 269000, accent: 0x1f2733, style: 'router',
+  },
+  {
+    id: 'tplink-sg1005d', category: 'desktop', vendor: 'TP-Link',
+    name: 'TL-SG1005D 5포트 허브', u: 0, width: 98, depth: 61, height: 25,
+    power: 3, weight: 0.16, price: 15000, accent: 0x4c8bf5, style: 'router',
+  },
+  {
+    id: 'dgx-spark', category: 'desktop', vendor: 'NVIDIA',
+    name: 'DGX Spark', u: 0, width: 150, depth: 150, height: 51,
+    power: 240, weight: 1.2, price: 9150000, accent: 0x76b900, style: 'mini',
+  },
+  {
+    id: 'mac-studio', category: 'desktop', vendor: 'Apple',
+    name: 'Mac Studio M4 Max', u: 0, width: 197, depth: 197, height: 95,
+    power: 270, weight: 2.8, price: 3190000, accent: 0xc7c9cc, style: 'mini',
+  },
+  {
+    id: 'mac-mini', category: 'desktop', vendor: 'Apple',
+    name: 'Mac mini M4', u: 0, width: 127, depth: 127, height: 50,
+    power: 65, weight: 0.7, price: 949000, accent: 0xc7c9cc, style: 'mini',
+  },
+  {
+    id: 'synology-ds1825', category: 'desktop', vendor: 'Synology',
+    name: 'DiskStation DS1825+', u: 0, width: 230, depth: 223, height: 223,
+    power: 90, weight: 8.8, price: 2150000, accent: 0xb5b5b5, style: 'nas-tower',
+    bays: 8, bayType: 'lff',
+  },
+  {
+    id: 'synology-ds923', category: 'desktop', vendor: 'Synology',
+    name: 'DiskStation DS923+', u: 0, width: 177, depth: 178, height: 199,
+    power: 32, weight: 3.0, price: 1170000, accent: 0xb5b5b5, style: 'nas-tower',
+    bays: 4, bayType: 'lff',
   },
 ];
 
