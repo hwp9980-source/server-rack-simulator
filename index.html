@@ -56,6 +56,25 @@
         <div id="placement-hint" class="hidden">
           랙의 원하는 위치를 클릭해 장착 · <b>Shift</b>+클릭 연속 배치 · <b>ESC</b> 취소
         </div>
+        <!-- 카메라 조작 패드 -->
+        <div id="cam-controls" title="">
+          <div class="cam-grid">
+            <span></span>
+            <button class="cam-btn" data-cam="up" title="위로 회전 (↑)">▲</button>
+            <span></span>
+            <button class="cam-btn" data-cam="left" title="왼쪽으로 회전 (←)">◀</button>
+            <button class="cam-btn" data-cam="reset" title="시점 초기화 (Home)">⟲</button>
+            <button class="cam-btn" data-cam="right" title="오른쪽으로 회전 (→)">▶</button>
+            <span></span>
+            <button class="cam-btn" data-cam="down" title="아래로 회전 (↓)">▼</button>
+            <span></span>
+          </div>
+          <div class="cam-zoom">
+            <button class="cam-btn" data-cam="zoomin" title="확대 (+)">＋</button>
+            <button class="cam-btn" data-cam="zoomout" title="축소 (−)">－</button>
+          </div>
+        </div>
+
         <div id="stats-bar">
           <span id="stat-units">0 / 42U</span>
           <span id="stat-power">0 W</span>

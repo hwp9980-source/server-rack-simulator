@@ -308,6 +308,76 @@ document.getElementById('view-front').onclick = () => flyTo([0, rackMidY(), 2.8]
 document.getElementById('view-rear').onclick = () => flyTo([0, rackMidY(), -2.8], [0, rackMidY(), 0]);
 document.getElementById('view-iso').onclick = () => flyTo([1.9, rackMidY() + 0.6, 2.6], [0, rackMidY() - 0.2, 0]);
 
+/* ── 카메라 조작 패드 ───────────────────────────────── */
+const _sph = new THREE.Spherical();
+const _off = new THREE.Vector3();
+
+// 궤도 회전 (dAz: 좌우, dPol: 상하, 라디안)
+function orbitBy(dAz, dPol) {
+  camAnim = null;
+  _off.subVectors(camera.position, controls.target);
+  _sph.setFromVector3(_off);
+  _sph.theta -= dAz;
+  _sph.phi = Math.max(0.08, Math.min(controls.maxPolarAngle, _sph.phi - dPol));
+  _off.setFromSpherical(_sph);
+  camera.position.copy(controls.target).add(_off);
+  camera.lookAt(controls.target);
+}
+
+// 줌 (factor < 1 확대, > 1 축소)
+function zoomBy(factor) {
+  camAnim = null;
+  _off.subVectors(camera.position, controls.target);
+  const r = Math.max(controls.minDistance, Math.min(controls.maxDistance, _off.length() * factor));
+  _off.setLength(r);
+  camera.position.copy(controls.target).add(_off);
+}
+
+function resetView() {
+  flyTo([1.9, rackMidY() + 0.6, 2.6], [0, rackMidY() - 0.2, 0]);
+}
+
+const CAM_STEP = { rot: 0.045, zoomIn: 0.965, zoomOut: 1.036 };
+const CAM_ACTIONS = {
+  left:    () => orbitBy(-CAM_STEP.rot, 0),
+  right:   () => orbitBy(CAM_STEP.rot, 0),
+  up:      () => orbitBy(0, CAM_STEP.rot),
+  down:    () => orbitBy(0, -CAM_STEP.rot),
+  zoomin:  () => zoomBy(CAM_STEP.zoomIn),
+  zoomout: () => zoomBy(CAM_STEP.zoomOut),
+};
+
+// 버튼을 누르고 있는 동안 반복 실행
+let camHold = null;
+function stopCamHold() {
+  if (camHold) { clearInterval(camHold); camHold = null; }
+}
+for (const btn of document.querySelectorAll('.cam-btn')) {
+  const action = btn.dataset.cam;
+  if (action === 'reset') { btn.onclick = resetView; continue; }
+  btn.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    CAM_ACTIONS[action]();
+    stopCamHold();
+    camHold = setInterval(CAM_ACTIONS[action], 30);
+  });
+  for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) {
+    btn.addEventListener(ev, stopCamHold);
+  }
+}
+
+// 키보드: 화살표 회전, +/- 줌, Home 초기화
+const CAM_KEYS = {
+  ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down',
+  '+': 'zoomin', '=': 'zoomin', '-': 'zoomout', '_': 'zoomout',
+};
+window.addEventListener('keydown', (e) => {
+  if (['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
+  if (e.key === 'Home') { resetView(); e.preventDefault(); return; }
+  const action = CAM_KEYS[e.key];
+  if (action) { CAM_ACTIONS[action](); e.preventDefault(); }
+});
+
 /* ── 툴바 ───────────────────────────────────────────── */
 const RACK_MIN_U = 2, RACK_MAX_U = 60;
 const rackSizeInput = document.getElementById('rack-size');

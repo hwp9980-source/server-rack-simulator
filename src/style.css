@@ -159,6 +159,34 @@ select:focus, input[type="search"]:focus { border-color: var(--accent); }
 #stat-weight::before { content: "무게"; }
 #stat-price::before  { content: "가격"; }
 
+/* ── 카메라 조작 패드 ─────────────── */
+#cam-controls {
+  position: absolute; bottom: 14px; right: 14px;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  user-select: none;
+}
+.cam-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 34px);
+  grid-template-rows: repeat(3, 34px);
+  gap: 4px;
+}
+.cam-zoom { display: flex; gap: 4px; }
+.cam-btn {
+  width: 34px; height: 34px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(28, 31, 38, .92);
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  touch-action: none;
+}
+.cam-zoom .cam-btn { width: 53px; font-size: 15px; }
+.cam-btn:hover { border-color: var(--accent); color: #fff; }
+.cam-btn:active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
 /* ── 인스펙터 (뷰포트 오버레이) ────── */
 #inspector {
   position: absolute; top: 14px; right: 14px;
