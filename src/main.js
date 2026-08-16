@@ -297,12 +297,12 @@ function showDeskGhost(type) {
   const w = type.width / 1000, d = Math.max(type.depth / 1000, 0.02), h = Math.max(type.height / 1000, 0.01);
   const usedW = list.reduce((sum, it) => sum + getType(it.typeId).width / 1000 + 0.01, 0);
   const x = -UNIT_W / 2 + 0.01 + usedW + w / 2;
-  const [, maxZ] = rack.deskZRange(shelfInst.id, d);
+  const z = rack.idealDeskZ(shelfInst.id, d);
   ghost.scale.set(w, h, d);
   ghost.position.set(
     shelfInst.mesh.position.x + x,
     shelfInst.mesh.position.y + 0.012 + h / 2,
-    shelfInst.mesh.position.z + maxZ
+    shelfInst.mesh.position.z + z
   );
   ghostMat.color.set(hoverValid ? 0x3fb950 : 0xe5534b);
   ghost.visible = true;

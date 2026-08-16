@@ -204,6 +204,13 @@ export class Rack {
     return [minZ, maxZ];
   }
 
+  /** 새로 배치할 때 쓰는 기본 z(선반 앞쪽에 붙는 위치) — 실제 이동 가능 범위 안으로 clamp */
+  idealDeskZ(shelfId, d) {
+    const [minZ, maxZ] = this.deskZRange(shelfId, d);
+    const ideal = -(DESK_INSET + d / 2);
+    return Math.max(minZ, Math.min(maxZ, ideal));
+  }
+
   /** 선반 위에 데스크탑형 기기를 배치할 수 있는지(폭 여유) 확인 */
   canAddDeskItem(shelfId, typeId) {
     const shelfInst = this.placed.get(shelfId);
@@ -217,8 +224,8 @@ export class Rack {
     if (usedW + w > UNIT_W - DESK_MARGIN * 2) return false;
     const d = Math.max(type.depth / 1000, 0.02);
     const x = -UNIT_W / 2 + DESK_MARGIN + usedW + w / 2;
-    const [, maxZ] = this.deskZRange(shelfId, d);
-    return this.canPlaceDeskItemAt(shelfId, x, maxZ, w, d);
+    const z = this.idealDeskZ(shelfId, d);
+    return this.canPlaceDeskItemAt(shelfId, x, z, w, d);
   }
 
   /** 선반 폭·깊이 안에서 기기 중심 좌표(x, z)가 들어갈 수 있는 범위로 clamp */
@@ -291,8 +298,8 @@ export class Rack {
     const w = type.width / 1000;
     const d = Math.max(type.depth / 1000, 0.02);
     const x = -UNIT_W / 2 + DESK_MARGIN + usedW + w / 2;
-    const [, maxZ] = this.deskZRange(shelfId, d);
-    return this.placeDeskItemAt(shelfId, typeId, x, maxZ);
+    const z = this.idealDeskZ(shelfId, d);
+    return this.placeDeskItemAt(shelfId, typeId, x, z);
   }
 
   removeDeskItem(id) {
