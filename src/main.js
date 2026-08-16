@@ -78,6 +78,7 @@ let dragging = null;         // { id, origSlot, moved }
 let hoverSlot = -1;
 let hoverValid = false;
 let hoverShelfId = null;     // 데스크탑형 배치 모드에서 호버 중인 선반 id
+let hoverDeskX = null;       // 선반 위 기기 드래그 중 호버 x좌표(로컬)
 
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
@@ -169,6 +170,8 @@ function selectUnit(id) {
       <tr><td>가격</td><td>${fmtWon(t.price)}</td></tr>`;
     document.getElementById('insp-up').disabled = true;
     document.getElementById('insp-down').disabled = true;
+    document.getElementById('insp-hint').innerHTML =
+      '선반 위에서 좌우로 드래그해 이동 · <b>Delete</b>로 제거<br />다른 기기와 겹치는 위치로는 이동할 수 없습니다';
   } else {
     document.getElementById('insp-specs').innerHTML = `
       <tr><td>위치</td><td>${inst.slot + 1}U ~ ${inst.slot + t.u}U</td></tr>
@@ -179,6 +182,8 @@ function selectUnit(id) {
       <tr><td>가격</td><td>${fmtWon(t.price)}</td></tr>`;
     document.getElementById('insp-up').disabled = rack.nearestFreeSlot(id, 1) < 0;
     document.getElementById('insp-down').disabled = rack.nearestFreeSlot(id, -1) < 0;
+    document.getElementById('insp-hint').innerHTML =
+      '드래그 또는 <b>Shift</b>+↑/↓로 이동 · <b>Delete</b>로 제거<br />막힌 방향은 다음 빈 자리로 건너뜁니다';
   }
   inspEl.classList.remove('hidden');
   updateSelBox();
@@ -303,6 +308,30 @@ function showDeskGhost(type) {
   ghost.visible = true;
 }
 
+// 선반 위 기기 드래그 중 고스트 — 같은 선반의 평면(폭 방향)에서만 이동
+function showDeskDragGhost(id) {
+  const item = rack.deskPlaced.get(id);
+  if (!item) { ghost.visible = false; hoverDeskX = null; return; }
+  const shelfInst = rack.placed.get(item.shelfId);
+  const type = getType(item.typeId);
+  const hits = raycaster.intersectObject(rack.pickBox);
+  if (!hits.length || !shelfInst) { ghost.visible = false; hoverDeskX = null; return; }
+  const w = type.width / 1000, d = Math.max(type.depth / 1000, 0.02), h = Math.max(type.height / 1000, 0.01);
+  // 선반은 항상 x=0 중심이므로 pickBox 히트의 월드 x가 곧 선반 로컬 x
+  const rawX = hits[0].point.x - shelfInst.mesh.position.x;
+  const clamped = rack.clampDeskX(w, rawX);
+  hoverDeskX = clamped;
+  hoverValid = rack.canPlaceDeskItemAt(item.shelfId, clamped, w, id);
+  ghost.scale.set(w, h, d);
+  ghost.position.set(
+    shelfInst.mesh.position.x + clamped,
+    shelfInst.mesh.position.y + 0.012 + h / 2,
+    shelfInst.mesh.position.z - (0.02 + d / 2)
+  );
+  ghostMat.color.set(hoverValid ? 0x3fb950 : 0xe5534b);
+  ghost.visible = true;
+}
+
 canvas.addEventListener('pointermove', (e) => {
   setPointer(e);
   if (placingType) {
@@ -310,8 +339,11 @@ canvas.addEventListener('pointermove', (e) => {
     else showGhost(placingType);
   } else if (dragging) {
     dragging.moved = true;
-    const t = getType(rack.placed.get(dragging.id).typeId);
-    showGhost(t, dragging.id);
+    if (dragging.kind === 'desk') showDeskDragGhost(dragging.id);
+    else {
+      const t = getType(rack.placed.get(dragging.id).typeId);
+      showGhost(t, dragging.id);
+    }
   }
 });
 
@@ -323,7 +355,10 @@ canvas.addEventListener('pointerdown', (e) => {
   if (inst) {
     selectUnit(inst.id);
     if (rack.placed.has(inst.id)) {
-      dragging = { id: inst.id, origSlot: inst.slot, moved: false };
+      dragging = { kind: 'unit', id: inst.id, origSlot: inst.slot, moved: false };
+      controls.enabled = false;
+    } else if (rack.deskPlaced.has(inst.id)) {
+      dragging = { kind: 'desk', id: inst.id, moved: false };
       controls.enabled = false;
     }
   } else {
@@ -333,10 +368,18 @@ canvas.addEventListener('pointerdown', (e) => {
 
 canvas.addEventListener('pointerup', (e) => {
   if (dragging) {
-    if (dragging.moved && hoverSlot >= 0 && hoverValid) {
-      rack.moveUnit(dragging.id, hoverSlot);
-      selectUnit(dragging.id);
-      persist();
+    if (dragging.moved) {
+      if (dragging.kind === 'desk') {
+        if (hoverDeskX !== null && hoverValid) {
+          rack.moveDeskItem(dragging.id, hoverDeskX);
+          selectUnit(dragging.id);
+          persist();
+        }
+      } else if (hoverSlot >= 0 && hoverValid) {
+        rack.moveUnit(dragging.id, hoverSlot);
+        selectUnit(dragging.id);
+        persist();
+      }
     }
     ghost.visible = false;
     dragging = null;

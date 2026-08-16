@@ -198,6 +198,42 @@ export class Rack {
     return usedW + type.width / 1000 <= UNIT_W - DESK_MARGIN * 2;
   }
 
+  /** 선반 폭 안에서 데스크탑형 기기 중심 x좌표가 들어갈 수 있는 범위로 clamp */
+  clampDeskX(w, x) {
+    const minX = -UNIT_W / 2 + DESK_MARGIN + w / 2;
+    const maxX = UNIT_W / 2 - DESK_MARGIN - w / 2;
+    return Math.max(minX, Math.min(maxX, x));
+  }
+
+  /** 선반 폭 범위 + 다른 기기와 겹치지 않는지 확인 (ignoreId는 이동 중인 자기 자신) */
+  canPlaceDeskItemAt(shelfId, x, w, ignoreId = null) {
+    const minX = -UNIT_W / 2 + DESK_MARGIN + w / 2;
+    const maxX = UNIT_W / 2 - DESK_MARGIN - w / 2;
+    if (x < minX - 1e-6 || x > maxX + 1e-6) return false;
+    const list = this.shelfItems.get(shelfId) || [];
+    for (const other of list) {
+      if (other.id === ignoreId) continue;
+      const ow = getType(other.typeId).width / 1000;
+      if (Math.abs(x - other.mesh.position.x) < (w + ow) / 2 + DESK_GAP) return false;
+    }
+    return true;
+  }
+
+  /** 선반 위 기기를 같은 선반의 평면(폭 방향) 안에서 이동. 겹치면 실패 */
+  moveDeskItem(id, x) {
+    const item = this.deskPlaced.get(id);
+    if (!item) return false;
+    const type = getType(item.typeId);
+    const w = type.width / 1000;
+    const clamped = this.clampDeskX(w, x);
+    if (!this.canPlaceDeskItemAt(item.shelfId, clamped, w, id)) return false;
+    item.mesh.position.x = clamped;
+    const list = this.shelfItems.get(item.shelfId) || [];
+    list.sort((a, b) => a.mesh.position.x - b.mesh.position.x);
+    this.shelfItems.set(item.shelfId, list);
+    return true;
+  }
+
   /** 선반(style: 'shelf') 위에 데스크탑형 기기를 좌→우로 이어붙여 배치 */
   addDeskItem(shelfId, typeId) {
     if (!this.canAddDeskItem(shelfId, typeId)) return null;
