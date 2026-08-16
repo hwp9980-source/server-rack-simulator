@@ -194,7 +194,13 @@ export class Rack {
     const shelfD = Math.max((shelfType?.depth ?? 450) / 1000, 0.05);
     let minZ = -(shelfD - DESK_BACK_MARGIN - d / 2);
     let maxZ = -(DESK_INSET + d / 2);
-    if (minZ > maxZ) { const mid = -shelfD / 2; minZ = maxZ = mid; }
+    if (minZ > maxZ) {
+      // 기기 깊이가 선반보다 깊어 완전히 안 들어가도, 선반 앞뒤 범위 안에서는
+      // (앞뒤로 살짝 튀어나오더라도) 최소한의 이동은 가능하게 허용
+      minZ = -(shelfD - DESK_BACK_MARGIN);
+      maxZ = -DESK_INSET;
+      if (minZ > maxZ) { const mid = -shelfD / 2; minZ = maxZ = mid; }
+    }
     return [minZ, maxZ];
   }
 
