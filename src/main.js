@@ -78,7 +78,7 @@ let dragging = null;         // { id, origSlot, moved }
 let hoverSlot = -1;
 let hoverValid = false;
 let hoverShelfId = null;     // 데스크탑형 배치 모드에서 호버 중인 선반 id
-let hoverDeskX = null;       // 선반 위 기기 드래그 중 호버 x좌표(로컬)
+let hoverDeskPos = null;     // 선반 위 기기 드래그 중 호버 좌표(로컬, {x, z})
 
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
@@ -171,7 +171,7 @@ function selectUnit(id) {
     document.getElementById('insp-up').disabled = true;
     document.getElementById('insp-down').disabled = true;
     document.getElementById('insp-hint').innerHTML =
-      '선반 위에서 좌우로 드래그해 이동 · <b>Delete</b>로 제거<br />다른 기기와 겹치는 위치로는 이동할 수 없습니다';
+      '선반 위에서 앞뒤·좌우로 드래그해 이동 · <b>Delete</b>로 제거<br />다른 기기와 겹치는 위치로는 이동할 수 없습니다';
   } else {
     document.getElementById('insp-specs').innerHTML = `
       <tr><td>위치</td><td>${inst.slot + 1}U ~ ${inst.slot + t.u}U</td></tr>
@@ -287,46 +287,53 @@ function raycastShelf() {
   return inst && getType(inst.typeId).style === 'shelf' ? inst : null;
 }
 
-// 선반 위 데스크탑형 기기 배치 고스트 (좌→우로 이어붙는 다음 자리에 미리보기)
+// 선반 위 데스크탑형 기기 배치 고스트 (앞줄 좌→우로 이어붙는 다음 자리에 미리보기)
 function showDeskGhost(type) {
   const shelfInst = raycastShelf();
   if (!shelfInst) { ghost.visible = false; hoverShelfId = null; return; }
   hoverShelfId = shelfInst.id;
   hoverValid = rack.canAddDeskItem(shelfInst.id, type.id);
   const list = rack.shelfItems.get(shelfInst.id) || [];
-  const DESK_MARGIN = 0.01, DESK_GAP = 0.01;
-  const usedW = list.reduce((sum, it) => sum + getType(it.typeId).width / 1000 + DESK_GAP, 0);
   const w = type.width / 1000, d = Math.max(type.depth / 1000, 0.02), h = Math.max(type.height / 1000, 0.01);
-  const x = -UNIT_W / 2 + DESK_MARGIN + usedW + w / 2;
+  const usedW = list.reduce((sum, it) => sum + getType(it.typeId).width / 1000 + 0.01, 0);
+  const x = -UNIT_W / 2 + 0.01 + usedW + w / 2;
+  const [, maxZ] = rack.deskZRange(shelfInst.id, d);
   ghost.scale.set(w, h, d);
   ghost.position.set(
     shelfInst.mesh.position.x + x,
     shelfInst.mesh.position.y + 0.012 + h / 2,
-    shelfInst.mesh.position.z - (0.02 + d / 2)
+    shelfInst.mesh.position.z + maxZ
   );
   ghostMat.color.set(hoverValid ? 0x3fb950 : 0xe5534b);
   ghost.visible = true;
 }
 
-// 선반 위 기기 드래그 중 고스트 — 같은 선반의 평면(폭 방향)에서만 이동
+// 선반 평면(수평) — 드래그 중인 기기의 앞뒤·좌우 위치를 알아내기 위한 레이캐스트 대상
+const _deskPlane = new THREE.Plane();
+const _deskPlaneHit = new THREE.Vector3();
+
+// 선반 위 기기 드래그 중 고스트 — 같은 선반의 평면(폭×깊이) 안에서 자유롭게 이동
 function showDeskDragGhost(id) {
   const item = rack.deskPlaced.get(id);
-  if (!item) { ghost.visible = false; hoverDeskX = null; return; }
+  if (!item) { ghost.visible = false; hoverDeskPos = null; return; }
   const shelfInst = rack.placed.get(item.shelfId);
+  if (!shelfInst) { ghost.visible = false; hoverDeskPos = null; return; }
   const type = getType(item.typeId);
-  const hits = raycaster.intersectObject(rack.pickBox);
-  if (!hits.length || !shelfInst) { ghost.visible = false; hoverDeskX = null; return; }
   const w = type.width / 1000, d = Math.max(type.depth / 1000, 0.02), h = Math.max(type.height / 1000, 0.01);
-  // 선반은 항상 x=0 중심이므로 pickBox 히트의 월드 x가 곧 선반 로컬 x
-  const rawX = hits[0].point.x - shelfInst.mesh.position.x;
-  const clamped = rack.clampDeskX(w, rawX);
-  hoverDeskX = clamped;
-  hoverValid = rack.canPlaceDeskItemAt(item.shelfId, clamped, w, id);
+  const surfaceY = shelfInst.mesh.position.y + 0.012;
+  _deskPlane.setFromNormalAndCoplanarPoint(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, surfaceY, 0));
+  const hit = raycaster.ray.intersectPlane(_deskPlane, _deskPlaneHit);
+  if (!hit) { ghost.visible = false; hoverDeskPos = null; return; }
+  const rawX = hit.x - shelfInst.mesh.position.x;
+  const rawZ = hit.z - shelfInst.mesh.position.z;
+  const clamped = rack.clampDeskPos(item.shelfId, w, d, rawX, rawZ);
+  hoverDeskPos = clamped;
+  hoverValid = rack.canPlaceDeskItemAt(item.shelfId, clamped.x, clamped.z, w, d, id);
   ghost.scale.set(w, h, d);
   ghost.position.set(
-    shelfInst.mesh.position.x + clamped,
-    shelfInst.mesh.position.y + 0.012 + h / 2,
-    shelfInst.mesh.position.z - (0.02 + d / 2)
+    shelfInst.mesh.position.x + clamped.x,
+    surfaceY + h / 2,
+    shelfInst.mesh.position.z + clamped.z
   );
   ghostMat.color.set(hoverValid ? 0x3fb950 : 0xe5534b);
   ghost.visible = true;
@@ -370,8 +377,8 @@ canvas.addEventListener('pointerup', (e) => {
   if (dragging) {
     if (dragging.moved) {
       if (dragging.kind === 'desk') {
-        if (hoverDeskX !== null && hoverValid) {
-          rack.moveDeskItem(dragging.id, hoverDeskX);
+        if (hoverDeskPos !== null && hoverValid) {
+          rack.moveDeskItem(dragging.id, hoverDeskPos.x, hoverDeskPos.z);
           selectUnit(dragging.id);
           persist();
         }

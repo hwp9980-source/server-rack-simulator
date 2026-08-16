@@ -6,9 +6,10 @@ import { getType } from './catalog.js';
 const RACK_W = 0.6;    // 외형 폭 (m)
 const BASE_H = 0.06;   // 하단 베이스 높이
 const POST = 0.05;     // 프레임 기둥 단면
-const DESK_MARGIN = 0.01;  // 선반 좌우 여백
-const DESK_GAP = 0.01;     // 선반 위 기기 간 간격
-const DESK_INSET = 0.02;   // 선반 앞쪽 여유(전면 돌출 방지)
+const DESK_MARGIN = 0.01;      // 선반 좌우 여백
+const DESK_GAP = 0.01;         // 선반 위 기기 간 간격
+const DESK_INSET = 0.02;       // 선반 앞쪽 여유(전면 돌출 방지)
+const DESK_BACK_MARGIN = 0.01; // 선반 뒤쪽 여유(후면 돌출 방지)
 
 export class Rack {
   constructor(scene, totalU = 42, depthMM = 1000) {
@@ -186,6 +187,17 @@ export class Rack {
     this.shelfItems.clear();
   }
 
+  /** 선반의 앞뒤(깊이 방향) 이동 가능 범위 [minZ, maxZ] (기기 깊이 d 기준) */
+  deskZRange(shelfId, d) {
+    const shelfInst = this.placed.get(shelfId);
+    const shelfType = shelfInst && getType(shelfInst.typeId);
+    const shelfD = Math.max((shelfType?.depth ?? 450) / 1000, 0.05);
+    let minZ = -(shelfD - DESK_BACK_MARGIN - d / 2);
+    let maxZ = -(DESK_INSET + d / 2);
+    if (minZ > maxZ) { const mid = -shelfD / 2; minZ = maxZ = mid; }
+    return [minZ, maxZ];
+  }
+
   /** 선반 위에 데스크탑형 기기를 배치할 수 있는지(폭 여유) 확인 */
   canAddDeskItem(shelfId, typeId) {
     const shelfInst = this.placed.get(shelfId);
@@ -195,65 +207,86 @@ export class Rack {
     if (!type) return false;
     const list = this.shelfItems.get(shelfId) || [];
     const usedW = list.reduce((sum, it) => sum + getType(it.typeId).width / 1000 + DESK_GAP, 0);
-    return usedW + type.width / 1000 <= UNIT_W - DESK_MARGIN * 2;
+    const w = type.width / 1000;
+    if (usedW + w > UNIT_W - DESK_MARGIN * 2) return false;
+    const d = Math.max(type.depth / 1000, 0.02);
+    const x = -UNIT_W / 2 + DESK_MARGIN + usedW + w / 2;
+    const [, maxZ] = this.deskZRange(shelfId, d);
+    return this.canPlaceDeskItemAt(shelfId, x, maxZ, w, d);
   }
 
-  /** 선반 폭 안에서 데스크탑형 기기 중심 x좌표가 들어갈 수 있는 범위로 clamp */
-  clampDeskX(w, x) {
+  /** 선반 폭·깊이 안에서 기기 중심 좌표(x, z)가 들어갈 수 있는 범위로 clamp */
+  clampDeskPos(shelfId, w, d, x, z) {
     const minX = -UNIT_W / 2 + DESK_MARGIN + w / 2;
     const maxX = UNIT_W / 2 - DESK_MARGIN - w / 2;
-    return Math.max(minX, Math.min(maxX, x));
+    const [minZ, maxZ] = this.deskZRange(shelfId, d);
+    return {
+      x: Math.max(minX, Math.min(maxX, x)),
+      z: Math.max(minZ, Math.min(maxZ, z)),
+    };
   }
 
-  /** 선반 폭 범위 + 다른 기기와 겹치지 않는지 확인 (ignoreId는 이동 중인 자기 자신) */
-  canPlaceDeskItemAt(shelfId, x, w, ignoreId = null) {
+  /** 선반 범위 안 + 다른 기기와 평면(폭×깊이)상 겹치지 않는지 확인 (ignoreId는 이동 중인 자기 자신) */
+  canPlaceDeskItemAt(shelfId, x, z, w, d, ignoreId = null) {
     const minX = -UNIT_W / 2 + DESK_MARGIN + w / 2;
     const maxX = UNIT_W / 2 - DESK_MARGIN - w / 2;
+    const [minZ, maxZ] = this.deskZRange(shelfId, d);
     if (x < minX - 1e-6 || x > maxX + 1e-6) return false;
+    if (z < minZ - 1e-6 || z > maxZ + 1e-6) return false;
     const list = this.shelfItems.get(shelfId) || [];
     for (const other of list) {
       if (other.id === ignoreId) continue;
-      const ow = getType(other.typeId).width / 1000;
-      if (Math.abs(x - other.mesh.position.x) < (w + ow) / 2 + DESK_GAP) return false;
+      const ot = getType(other.typeId);
+      const ow = ot.width / 1000, od = Math.max(ot.depth / 1000, 0.02);
+      const overlapX = Math.abs(x - other.mesh.position.x) < (w + ow) / 2 + DESK_GAP;
+      const overlapZ = Math.abs(z - other.mesh.position.z) < (d + od) / 2 + DESK_GAP;
+      if (overlapX && overlapZ) return false;
     }
     return true;
   }
 
-  /** 선반 위 기기를 같은 선반의 평면(폭 방향) 안에서 이동. 겹치면 실패 */
-  moveDeskItem(id, x) {
+  /** 선반 위 기기를 같은 선반의 평면(폭×깊이) 안에서 이동. 겹치면 실패 */
+  moveDeskItem(id, x, z) {
     const item = this.deskPlaced.get(id);
     if (!item) return false;
     const type = getType(item.typeId);
-    const w = type.width / 1000;
-    const clamped = this.clampDeskX(w, x);
-    if (!this.canPlaceDeskItemAt(item.shelfId, clamped, w, id)) return false;
-    item.mesh.position.x = clamped;
-    const list = this.shelfItems.get(item.shelfId) || [];
-    list.sort((a, b) => a.mesh.position.x - b.mesh.position.x);
-    this.shelfItems.set(item.shelfId, list);
+    const w = type.width / 1000, d = Math.max(type.depth / 1000, 0.02);
+    const clamped = this.clampDeskPos(item.shelfId, w, d, x, z);
+    if (!this.canPlaceDeskItemAt(item.shelfId, clamped.x, clamped.z, w, d, id)) return false;
+    item.mesh.position.x = clamped.x;
+    item.mesh.position.z = clamped.z;
     return true;
   }
 
-  /** 선반(style: 'shelf') 위에 데스크탑형 기기를 좌→우로 이어붙여 배치 */
+  /** 내부용: 검증 없이 지정 좌표에 데스크탑형 기기 배치 (직렬화 복원 전용) */
+  placeDeskItemAt(shelfId, typeId, x, z) {
+    const shelfInst = this.placed.get(shelfId);
+    const type = getType(typeId);
+    if (!shelfInst || !type) return null;
+    const id = this.nextId++;
+    const mesh = createDesktopMesh(type);
+    mesh.position.set(x, 0.012, z);
+    mesh.userData.instanceId = id;
+    shelfInst.mesh.add(mesh);
+    const item = { id, typeId, shelfId, mesh };
+    this.deskPlaced.set(id, item);
+    const list = this.shelfItems.get(shelfId) || [];
+    list.push(item);
+    this.shelfItems.set(shelfId, list);
+    return item;
+  }
+
+  /** 선반(style: 'shelf') 위에 데스크탑형 기기를 앞줄 좌→우로 이어붙여 배치 */
   addDeskItem(shelfId, typeId) {
     if (!this.canAddDeskItem(shelfId, typeId)) return null;
-    const shelfInst = this.placed.get(shelfId);
     const type = getType(typeId);
     const list = this.shelfItems.get(shelfId) || [];
     const usedW = list.reduce((sum, it) => sum + getType(it.typeId).width / 1000 + DESK_GAP, 0);
     const w = type.width / 1000;
     const d = Math.max(type.depth / 1000, 0.02);
     const x = -UNIT_W / 2 + DESK_MARGIN + usedW + w / 2;
-    const id = this.nextId++;
-    const mesh = createDesktopMesh(type);
-    mesh.position.set(x, 0.012, -(DESK_INSET + d / 2));
-    mesh.userData.instanceId = id;
-    shelfInst.mesh.add(mesh);
-    const item = { id, typeId, shelfId, mesh };
-    this.deskPlaced.set(id, item);
-    list.push(item);
-    this.shelfItems.set(shelfId, list);
-    return item;
+    const [, maxZ] = this.deskZRange(shelfId, d);
+    return this.placeDeskItemAt(shelfId, typeId, x, maxZ);
   }
 
   removeDeskItem(id) {
@@ -264,18 +297,6 @@ export class Rack {
     const list = this.shelfItems.get(item.shelfId) || [];
     const idx = list.findIndex((it) => it.id === id);
     if (idx >= 0) list.splice(idx, 1);
-    this.repackShelf(item.shelfId);
-  }
-
-  /** 선반 위 기기들을 좌→우로 빈틈없이 재배치 (제거 후 호출) */
-  repackShelf(shelfId) {
-    const list = this.shelfItems.get(shelfId) || [];
-    let x = -UNIT_W / 2 + DESK_MARGIN;
-    for (const it of list) {
-      const w = getType(it.typeId).width / 1000;
-      it.mesh.position.x = x + w / 2;
-      x += w + DESK_GAP;
-    }
   }
 
   /** 랙 크기(U) 변경 — 들어갈 수 있는 유닛은 유지 */
@@ -288,8 +309,16 @@ export class Rack {
       const type = getType(u.typeId);
       if (type && u.slot + type.u <= totalU) {
         const inst = this.addUnit(u.typeId, u.slot);
-        if (inst) for (const dtId of u.deskItems || []) this.addDeskItem(inst.id, dtId);
+        if (inst) this.restoreDeskItems(inst.id, u.deskItems);
       }
+    }
+  }
+
+  /** 직렬화된 deskItems를 복원 — 좌표가 있으면 그대로, 없으면(구버전 typeId만 저장) 자동 배치 */
+  restoreDeskItems(shelfId, deskItems) {
+    for (const dt of deskItems || []) {
+      if (typeof dt === 'string') this.addDeskItem(shelfId, dt);
+      else this.placeDeskItemAt(shelfId, dt.typeId, dt.x, dt.z);
     }
   }
 
@@ -313,7 +342,7 @@ export class Rack {
     this.build();
     for (const u of saved) {
       const inst = this.addUnit(u.typeId, u.slot);
-      if (inst) for (const dtId of u.deskItems || []) this.addDeskItem(inst.id, dtId);
+      if (inst) this.restoreDeskItems(inst.id, u.deskItems);
     }
   }
 
@@ -326,7 +355,11 @@ export class Rack {
         .map((u) => ({
           typeId: u.typeId,
           slot: u.slot,
-          deskItems: (this.shelfItems.get(u.id) || []).map((it) => it.typeId),
+          deskItems: (this.shelfItems.get(u.id) || []).map((it) => ({
+            typeId: it.typeId,
+            x: Number(it.mesh.position.x.toFixed(4)),
+            z: Number(it.mesh.position.z.toFixed(4)),
+          })),
         })),
     };
   }
@@ -339,7 +372,7 @@ export class Rack {
     if (rebuild) this.build();
     for (const u of data.units || []) {
       const inst = this.addUnit(u.typeId, u.slot);
-      if (inst) for (const dtId of u.deskItems || []) this.addDeskItem(inst.id, dtId);
+      if (inst) this.restoreDeskItems(inst.id, u.deskItems);
     }
   }
 
